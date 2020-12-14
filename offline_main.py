@@ -1,21 +1,38 @@
 from Moving_ARIMA import moving_arima_signal_maker
 from Past_Derivative import pd_signal_maker
 import pandas as pd
+import numpy as np
 import datetime
+import pandas_datareader as web
 from Utils import find_positive_idx
 from Utils import element_exist
 import requests
 from Utils import stop_bleeding
+from LSTM import lstm_funcs
 
-stock_symbols = ['AAPL', 'GOOG', 'TSLA']
-AAPL = pd.read_csv('/home/elessar/AAPL.csv')
-GOOG = pd.read_csv('/home/elessar/GOOG.csv')
-TSLA = pd.read_csv('/home/elessar/TSLA.csv')
-list_of_dfs = [AAPL, GOOG, TSLA]
+stock_symbols = ['MSFT', 'AMZN', 'FB']
+list_of_dfs = []
+list_lstm_models = []
+for i in stock_symbols:
+    df = web.DataReader(i, data_source='yahoo', start='2012-01-01', end='2020-11-5')
+    df.to_csv(f'{i}.csv')
+    df = pd.read_csv(f'{i}.csv')
+    x_lstm, y_lstm = lstm_funcs.build_dataset(df['Close'])
+    x_lstm = np.reshape(x_lstm, (x_lstm.shape[0], x_lstm.shape[1], 1))
+    y_lstm = np.reshape(y_lstm, (y_lstm.shape[0], 1))
+    print(x_lstm.shape)
+    print(y_lstm.shape)
+    lstm_model = lstm_funcs.build_lstm()
+    lstm_model.compile(optimizer='adam', loss='mean_squared_error')
+    lstm_model.fit(x_lstm, y_lstm, epochs = 5, batch_size = 1)
+    list_lstm_models.append(lstm_model)
+    list_of_dfs.append(df)
+
+
 delta = datetime.timedelta(days=1)
-signal_day = datetime.date(2020, 2, 1)
+signal_day = datetime.date(2020, 2, 5)
 b_signal_day = signal_day - datetime.timedelta(days=1)
-days_ahead = 100
+days_ahead = 180
 total_property = 0
 total_property_list = [1000]
 initial_capital = 1000
@@ -25,12 +42,30 @@ key_error = False
 
 with open('commands.txt', 'a') as file:
     for q in range(days_ahead):
+        print(f'b_signal_weekday is {b_signal_day.weekday()}')
+
+        if b_signal_day.weekday() == 5 or b_signal_day.weekday() == 6:
+            b_signal_day += delta
+            continue
+
         profits = []
         methods = []
         signals = []
         stock_prices = []
+        lstm_pred = []
+
         try:
-            a = AAPL.loc[AAPL['Date'] == str(b_signal_day)]
+            a_prime = list_of_dfs[0]
+            a_zgond = list_lstm_models[0]
+            a = a_prime.loc[a_prime['Date'] == str(b_signal_day)]
+            day_index_0 = a_prime.index[a_prime['Date'] == str(b_signal_day)].tolist()[0]
+            a_prime_prime = a_prime['Close'].values
+            inp_lstm_0 = a_prime_prime[day_index_0-60:day_index_0]
+            print(inp_lstm_0)
+            inp_lstm_0 = np.array(inp_lstm_0, dtype = 'float32')
+            print(inp_lstm_0.shape)
+            inp_lstm_0 = np.reshape(inp_lstm_0, (1,60,1))
+            tom_price_0 = a_zgond.predict(inp_lstm_0)
             if not a.empty:
                 sp0 = a
                 print(f'sp0 is {sp0}')
@@ -38,31 +73,56 @@ with open('commands.txt', 'a') as file:
                 pass
 
 
-        except KeyError:
-            pass
+
+        except (KeyError, requests.exceptions.ConnectionError):
+
+            print(f'There is a serious problem with your Internet Connection')
         try:
-            b = GOOG.loc[GOOG['Date'] == str(b_signal_day)]
+            b_prime = list_of_dfs[1]
+            b_zgond = list_lstm_models[1]
+            b = b_prime.loc[b_prime['Date'] == str(b_signal_day)]
+            day_index_1 = b_prime.index[b_prime['Date'] == str(b_signal_day)].tolist()[0]
+            b_prime_prime = b_prime['Close'].values
+            inp_lstm_1 = b_prime_prime[day_index_1 - 60:day_index_1]
+            inp_lstm_1 = np.array(inp_lstm_1, dtype='float32')
+            inp_lstm_1 = np.reshape(inp_lstm_1, (1,60, 1))
+            tom_price_1 = b_zgond.predict(inp_lstm_1)
             if not b.empty:
                 sp1 = b
                 print(f'sp1 is {sp1}')
             elif b.empty:
                 pass
 
-        except KeyError:
+        except (KeyError, requests.exceptions.ConnectionError):
+            print(f'There is a serious problem with your Internet Connection')
             pass
         try:
-            g = TSLA.loc[TSLA['Date'] == str(b_signal_day)]
+            g_prime = list_of_dfs[2]
+            g_zgond = list_lstm_models[2]
+            g = g_prime.loc[g_prime['Date'] == str(b_signal_day)]
+            day_index_2 = g_prime.index[g_prime['Date'] == str(b_signal_day)].tolist()[0]
+            g_prime_prime = g_prime['Close'].values
+            inp_lstm_2 = g_prime_prime[day_index_2 - 60:day_index_2]
+            inp_lstm_2 = np.array(inp_lstm_2, dtype='float32')
+            inp_lstm_2 = np.reshape(inp_lstm_2, (1,60,1))
+            tom_price_2 = g_zgond.predict(inp_lstm_2)
             if not g.empty:
                 sp2 = g
                 print(f'sp2 is {sp2}')
             elif g.empty:
                 pass
 
-        except KeyError:
-            pass
+
+        except (KeyError, requests.exceptions.ConnectionError):
+
+            print(f'There is a serious problem with your Internet Connection')
         stock_prices.append(sp0)
         stock_prices.append(sp1)
         stock_prices.append(sp2)
+
+        lstm_pred.append(tom_price_0)
+        lstm_pred.append(tom_price_1)
+        lstm_pred.append(tom_price_2)
 
 
         def buy(stock_idx):
@@ -70,18 +130,19 @@ with open('commands.txt', 'a') as file:
             global total_shares
             global total_property
             global total_property_list
-            p = stock_prices[stock_idx]['Close'].values * 0.05
-            total_shares[stock_idx] = initial_capital / (stock_prices[stock_idx]['Close'].values + p)
+            # p = stock_prices[stock_idx]['Open'].values * 0.15
+            total_shares[stock_idx] = initial_capital / (lstm_pred[stock_idx])
             initial_capital = 0
-            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Close'].values
-            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Close'].values
-            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Close'].values
+            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Open'].values
+            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Open'].values
+            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Open'].values
             total_property = (initial_capital > 0) * initial_capital + property_0 + property_1 + property_2
             total_property_list.append(total_property)
             print('buy was executed')
             print(f'initial capital : {initial_capital}')
             print(f'total_shares : {total_shares}')
             print(f'current: {current}')
+            print(f'Total Property is: {total_property}')
 
 
         def sell(stock_idx):
@@ -89,55 +150,66 @@ with open('commands.txt', 'a') as file:
             global total_shares
             global total_property
             global total_property_list
-            q = stock_prices[stock_idx]['Close'].values * 0.05
-            gained_money = total_shares[stock_idx] * (stock_prices[stock_idx]['Close'].values - q)
+            # q = stock_prices[stock_idx]['Open'].values * 0.15
+            gained_money = total_shares[stock_idx] * (lstm_pred[stock_idx])
             initial_capital += gained_money
             total_shares[stock_idx] = 0
-            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Close'].values
-            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Close'].values
-            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Close'].values
+            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Open'].values
+            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Open'].values
+            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Open'].values
             total_property = (initial_capital > 0) * initial_capital + property_0 + property_1 + property_2
             total_property_list.append(total_property)
             print('sell was executed')
             print(f'initial capital : {initial_capital}')
             print(f'total_shares : {total_shares}')
             print(f'current: {current}')
+            print(f'Total Property is: {total_property}')
 
 
         def hold():
             global total_property
             global total_property_list
-            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Close'].values
-            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Close'].values
-            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Close'].values
+            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Open'].values
+            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Open'].values
+            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Open'].values
             total_property = (initial_capital > 0) * initial_capital + property_0 + property_1 + property_2
             total_property_list.append(total_property)
             print('hold was executed')
             print(f'initial capital : {initial_capital}')
             print(f'total_shares : {total_shares}')
+            print(f'Total Property is: {total_property}')
 
 
         for i, j in enumerate(stock_symbols):
             print(j)
             try:
                 # arima_signal, arima_profit = moving_arima_signal_maker(j, str(b_signal_day), 500)
-                sig_and_prof_arima = moving_arima_signal_maker(j, str(b_signal_day), 500)
-                if type(sig_and_prof_arima) != None:
-                    arima_signal, arima_profit = sig_and_prof_arima
+                sig_and_prof_arima = moving_arima_signal_maker(j, str(b_signal_day), 100)
+                if sig_and_prof_arima is not None:
+                    arima_signal, arima_profit_open = sig_and_prof_arima
                 else:
-                    continue
+                    print("ARIMA CRASHED!!!!!!!!")
+                    arima_profit_open = 0
+                    # arima_profit_close = 0
+                    arima_signal = -1
+                    # continue
                 # pd_signal, pd_profit = pd_signal_maker(j, str(b_signal_day), 500)
-                sig_and_prof_pd = pd_signal_maker(j, str(b_signal_day), 500)
-                if type(sig_and_prof_pd) != None:
-                    pd_signal, pd_profit = sig_and_prof_pd
+                sig_and_prof_pd = pd_signal_maker(j, str(b_signal_day), 100)
+                if sig_and_prof_pd is not None:
+                    pd_signal, pd_profit_open = sig_and_prof_pd
                 else:
-                    continue
+                    print("PD CRASHED!!!")
+                    pd_profit_open = 0
+                    # pd_profit_open = 0
+                    pd_signal = -1
+                    # continue
             except requests.exceptions.ConnectionError:
+                print("The internet Connection ruined everything")
                 break
-            print(f'pd_signal pd_profit: {pd_signal},{pd_profit}')
-            print(f'arima signal : {arima_signal}, {arima_profit}')
-            profits.append(max(arima_profit, pd_profit))
-            if arima_profit > pd_profit:
+            print(f'pd_signal pd_profit: {pd_signal},{pd_profit_open}')
+            print(f'arima signal : {arima_signal}, {arima_profit_open}')
+            profits.append(max(arima_profit_open, pd_profit_open))
+            if arima_profit_open > pd_profit_open:
                 methods.append(0)
                 signals.append(arima_signal)
             else:
@@ -155,7 +227,8 @@ with open('commands.txt', 'a') as file:
         print(f'most valuable: {most_valuable}')
         print(f'second mv: {second_most_valuable}')
         print(f'third : {third}')
-        if len(total_property_list) >= 2 and ((total_property_list[-1]-1000)/10)>10 and stop_bleeding(total_property_list[q-2], total_property_list[q-1]):
+        if len(total_property_list) >= 2 and initial_capital == 0 and stop_bleeding(
+                total_property_list[q - 2], total_property_list[q - 1]):
             sell(current)
             print('You Are So So lucky to have me man! I just saved you from a terrible collapse')
             file.write(f'Date: {b_signal_day + delta} ---- command: EMERGENCY!! sell  {stock_symbols[current]} \n')
