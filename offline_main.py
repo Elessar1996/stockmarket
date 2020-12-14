@@ -14,7 +14,7 @@ stock_symbols = ['MSFT', 'AMZN', 'FB']
 list_of_dfs = []
 list_lstm_models = []
 for i in stock_symbols:
-    df = web.DataReader(i, data_source='yahoo', start='2012-01-01', end='2020-11-5')
+    df = web.DataReader(i, data_source='yahoo', start='2020-01-01', end='2020-11-5')
     df.to_csv(f'{i}.csv')
     df = pd.read_csv(f'{i}.csv')
     x_lstm, y_lstm = lstm_funcs.build_dataset(df['Close'])
@@ -24,7 +24,7 @@ for i in stock_symbols:
     print(y_lstm.shape)
     lstm_model = lstm_funcs.build_lstm()
     lstm_model.compile(optimizer='adam', loss='mean_squared_error')
-    lstm_model.fit(x_lstm, y_lstm, epochs = 5, batch_size = 1)
+    lstm_model.fit(x_lstm, y_lstm, epochs = 1, batch_size = 1)
     list_lstm_models.append(lstm_model)
     list_of_dfs.append(df)
 
@@ -60,14 +60,15 @@ with open('commands.txt', 'a') as file:
             a = a_prime.loc[a_prime['Date'] == str(b_signal_day)]
             day_index_0 = a_prime.index[a_prime['Date'] == str(b_signal_day)].tolist()[0]
             a_prime_prime = a_prime['Close'].values
-            inp_lstm_0 = a_prime_prime[day_index_0-60:day_index_0]
-            print(inp_lstm_0)
-            inp_lstm_0 = np.array(inp_lstm_0, dtype = 'float32')
-            print(inp_lstm_0.shape)
-            inp_lstm_0 = np.reshape(inp_lstm_0, (1,60,1))
-            tom_price_0 = a_zgond.predict(inp_lstm_0)
+            # inp_lstm_0 = a_prime_prime[day_index_0-60:day_index_0]
+            # print(inp_lstm_0)
+            # inp_lstm_0 = np.array(inp_lstm_0, dtype = 'float32')
+            # print(inp_lstm_0.shape)
+            # inp_lstm_0 = np.reshape(inp_lstm_0, (1,60,1))
+            # tom_price_0 = a_zgond.predict(inp_lstm_0)
             if not a.empty:
                 sp0 = a
+                print(f'a is {a}')
                 print(f'sp0 is {sp0}')
             elif a.empty:
                 pass
@@ -83,11 +84,12 @@ with open('commands.txt', 'a') as file:
             b = b_prime.loc[b_prime['Date'] == str(b_signal_day)]
             day_index_1 = b_prime.index[b_prime['Date'] == str(b_signal_day)].tolist()[0]
             b_prime_prime = b_prime['Close'].values
-            inp_lstm_1 = b_prime_prime[day_index_1 - 60:day_index_1]
-            inp_lstm_1 = np.array(inp_lstm_1, dtype='float32')
-            inp_lstm_1 = np.reshape(inp_lstm_1, (1,60, 1))
-            tom_price_1 = b_zgond.predict(inp_lstm_1)
+            # inp_lstm_1 = b_prime_prime[day_index_1 - 60:day_index_1]
+            # inp_lstm_1 = np.array(inp_lstm_1, dtype='float32')
+            # inp_lstm_1 = np.reshape(inp_lstm_1, (1,60, 1))
+            # tom_price_1 = b_zgond.predict(inp_lstm_1)
             if not b.empty:
+                print(f'b is {b}')
                 sp1 = b
                 print(f'sp1 is {sp1}')
             elif b.empty:
@@ -102,11 +104,12 @@ with open('commands.txt', 'a') as file:
             g = g_prime.loc[g_prime['Date'] == str(b_signal_day)]
             day_index_2 = g_prime.index[g_prime['Date'] == str(b_signal_day)].tolist()[0]
             g_prime_prime = g_prime['Close'].values
-            inp_lstm_2 = g_prime_prime[day_index_2 - 60:day_index_2]
-            inp_lstm_2 = np.array(inp_lstm_2, dtype='float32')
-            inp_lstm_2 = np.reshape(inp_lstm_2, (1,60,1))
-            tom_price_2 = g_zgond.predict(inp_lstm_2)
+            # inp_lstm_2 = g_prime_prime[day_index_2 - 60:day_index_2]
+            # inp_lstm_2 = np.array(inp_lstm_2, dtype='float32')
+            # inp_lstm_2 = np.reshape(inp_lstm_2, (1,60,1))
+            # tom_price_2 = g_zgond.predict(inp_lstm_2)
             if not g.empty:
+                print(f'g is {g}')
                 sp2 = g
                 print(f'sp2 is {sp2}')
             elif g.empty:
@@ -120,9 +123,9 @@ with open('commands.txt', 'a') as file:
         stock_prices.append(sp1)
         stock_prices.append(sp2)
 
-        lstm_pred.append(tom_price_0)
-        lstm_pred.append(tom_price_1)
-        lstm_pred.append(tom_price_2)
+        # lstm_pred.append(tom_price_0)
+        # lstm_pred.append(tom_price_1)
+        # lstm_pred.append(tom_price_2)
 
 
         def buy(stock_idx):
@@ -131,7 +134,7 @@ with open('commands.txt', 'a') as file:
             global total_property
             global total_property_list
             # p = stock_prices[stock_idx]['Open'].values * 0.15
-            total_shares[stock_idx] = initial_capital / (lstm_pred[stock_idx])
+            total_shares[stock_idx] = initial_capital / (stock_prices[stock_idx]['Close'])
             initial_capital = 0
             property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Open'].values
             property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Open'].values
@@ -151,12 +154,12 @@ with open('commands.txt', 'a') as file:
             global total_property
             global total_property_list
             # q = stock_prices[stock_idx]['Open'].values * 0.15
-            gained_money = total_shares[stock_idx] * (lstm_pred[stock_idx])
+            gained_money = total_shares[stock_idx] * (stock_prices[stock_idx]['Close'])
             initial_capital += gained_money
             total_shares[stock_idx] = 0
-            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Open'].values
-            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Open'].values
-            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Open'].values
+            property_0 = (total_shares[0] > 0) * total_shares[0] * stock_prices[0]['Close'].values
+            property_1 = (total_shares[1] > 0) * total_shares[1] * stock_prices[1]['Close'].values
+            property_2 = (total_shares[2] > 0) * total_shares[2] * stock_prices[2]['Close'].values
             total_property = (initial_capital > 0) * initial_capital + property_0 + property_1 + property_2
             total_property_list.append(total_property)
             print('sell was executed')
@@ -184,7 +187,7 @@ with open('commands.txt', 'a') as file:
             print(j)
             try:
                 # arima_signal, arima_profit = moving_arima_signal_maker(j, str(b_signal_day), 500)
-                sig_and_prof_arima = moving_arima_signal_maker(j, str(b_signal_day), 100)
+                sig_and_prof_arima = moving_arima_signal_maker(j, str(b_signal_day), 100, list_lstm_models[i])
                 if sig_and_prof_arima is not None:
                     arima_signal, arima_profit_open = sig_and_prof_arima
                 else:
@@ -194,7 +197,7 @@ with open('commands.txt', 'a') as file:
                     arima_signal = -1
                     # continue
                 # pd_signal, pd_profit = pd_signal_maker(j, str(b_signal_day), 500)
-                sig_and_prof_pd = pd_signal_maker(j, str(b_signal_day), 100)
+                sig_and_prof_pd = pd_signal_maker(j, str(b_signal_day), 100, list_lstm_models[i])
                 if sig_and_prof_pd is not None:
                     pd_signal, pd_profit_open = sig_and_prof_pd
                 else:
@@ -227,12 +230,12 @@ with open('commands.txt', 'a') as file:
         print(f'most valuable: {most_valuable}')
         print(f'second mv: {second_most_valuable}')
         print(f'third : {third}')
-        if len(total_property_list) >= 2 and initial_capital == 0 and stop_bleeding(
-                total_property_list[q - 2], total_property_list[q - 1]):
-            sell(current)
-            print('You Are So So lucky to have me man! I just saved you from a terrible collapse')
-            file.write(f'Date: {b_signal_day + delta} ---- command: EMERGENCY!! sell  {stock_symbols[current]} \n')
-        elif initial_capital > 0:
+        # if len(total_property_list) >= 2 and initial_capital == 0 and stop_bleeding(
+        #         total_property_list[q - 2], total_property_list[q - 1]):
+        #     sell(current)
+        #     print('You Are So So lucky to have me man! I just saved you from a terrible collapse')
+        #     file.write(f'Date: {b_signal_day + delta} ---- command: EMERGENCY!! sell  {stock_symbols[current]} \n')
+        if initial_capital > 0:
             print(f'app has gone in to ic >0')
             if all(flag > 0 for flag in signals):
                 buy(most_valuable)
